@@ -1,0 +1,8 @@
+torch>=2.0
+numpy>=1.23
+pandas>=1.5
+scikit-learn>=1.2
+scipy>=1.10          # Wilcoxon signed-rank test (aggregate.py)
+matplotlib>=3.6
+wfdb>=4.1            # PTB-XL and MIT-BIH (streamed directly from PhysioNet)
+aeon>=0.9            # UCR/UEA archive access (ECG200, ECG5000, TwoLeadECG, ...)

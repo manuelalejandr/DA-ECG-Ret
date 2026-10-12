@@ -1,0 +1,15 @@
+scope,metric,spearman_with_P,n_points
+encoders (NN only),Pfine_sub,0.9636363636363635,10
+encoders (NN only),RelDiv_sub,0.5151515151515151,10
+encoders (NN only),aNDCG_sub,0.9636363636363635,10
+encoders (NN only),Pfine_code,0.9757575757575757,10
+encoders (NN only),RelDiv_code,0.7939393939393938,10
+encoders (NN only),aNDCG_code,0.9393939393939393,10
+encoders (NN only),LegacyDiv,-0.9030303030303028,10
+all encoder x re-ranker points,Pfine_sub,0.9949249287966337,80
+all encoder x re-ranker points,RelDiv_sub,-0.44097773663284556,80
+all encoder x re-ranker points,aNDCG_sub,0.8539900023001912,80
+all encoder x re-ranker points,Pfine_code,0.9939110509614699,80
+all encoder x re-ranker points,RelDiv_code,-0.201140432617717,80
+all encoder x re-ranker points,aNDCG_code,0.8888003328817229,80
+all encoder x re-ranker points,LegacyDiv,-0.9778241403423715,80

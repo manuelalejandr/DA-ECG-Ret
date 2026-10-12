@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+venv/
+ptbxl_data/
+outputs/
+bench_outputs/
+bench_secondary/
+embeds/
+*.pt
+*.zip
+.DS_Store

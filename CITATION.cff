@@ -1,0 +1,15 @@
+cff-version: 1.2.0
+message: "If you use this benchmark, please cite the paper below (update once published) and/or this repository."
+title: "Diversity-aware ECG retrieval: task, hierarchical evaluation and benchmark"
+authors:
+  - family-names: Goyo
+    given-names: "Manuel Alejandro"
+    affiliation: "Universidad Arturo Prat"
+  - family-names: Hidalgo
+    given-names: "Mauricio"
+    affiliation: "Universidad San Sebastián"
+  - family-names: Paredes
+    given-names: "Oscar"
+    affiliation: "Universidad ORT Uruguay"
+license: MIT
+repository-code: "https://github.com/YOUR-USERNAME/YOUR-REPO"
