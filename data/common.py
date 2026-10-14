@@ -42,7 +42,8 @@ class ContrastiveWrapper(Dataset):
         v2 = self.augment(x.clone())
         phys = self._phys_cache.get(idx)
         if phys is None:
-            phys = extract_physio_features(x.squeeze(0).numpy())
+            # physiological descriptors are single-lead: use lead II (index 1) if several leads
+            phys = extract_physio_features(x[min(1, x.shape[0] - 1)].numpy())
             self._phys_cache[idx] = phys
         return {
             "view1": v1,

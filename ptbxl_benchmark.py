@@ -43,6 +43,12 @@ from config import Config, SSL_METHODS
 from experiment_utils import parse_dataset_spec, dataset_tag, make_args_namespace
 
 
+def run_tag(spec_tag, args):
+    """Directory tag for embeddings/metrics; a non-empty --run_tag keeps variants
+    (e.g. 12 leads, 500 Hz) from overwriting the default lead-II 100 Hz results."""
+    return spec_tag + (args.run_tag or "")
+
+
 def _key_to_fn(k):
     return k.replace("|", "__")
 
@@ -67,10 +73,15 @@ def stage_embed(args):
     device = resolve_device(verbose=True)
     for spec in args.datasets:
         kind, name = parse_dataset_spec(spec)
-        tag = dataset_tag(kind, name)
+        tag = run_tag(dataset_tag(kind, name), args)
         ns = make_args_namespace(kind, name, args.data_root)
         cfg = Config()
         cfg.dataset, cfg.ucr_name, cfg.data_root = kind, ns.ucr_name, args.data_root
+        if kind == "ptbxl":
+            cfg.lead_index, cfg.sampling_rate, cfg.signal_length = args.lead_index, args.sampling_rate, args.signal_length
+            cfg.in_channels = 12 if args.lead_index < 0 else 1
+            print(f"[ptbxl] lead_index={cfg.lead_index} (in_channels={cfg.in_channels}), "
+                  f"{cfg.sampling_rate} Hz, length {cfg.signal_length}")
         cfg.encoder_name, cfg.epochs, cfg.batch_size = args.encoder, args.epochs, args.batch_size
 
         print(f"\n{'=' * 70}\nEMBED  dataset={tag}\n{'=' * 70}")
@@ -93,7 +104,7 @@ def stage_embed(args):
                     continue
                 t0 = time.time()
                 model = None
-                if seed == 0 and args.reuse_checkpoints:
+                if seed == 0 and args.reuse_checkpoints and not args.run_tag:
                     ckpt = os.path.join(args.reuse_checkpoints, tag, "checkpoints", f"encoder_{method}.pt")
                     if os.path.exists(ckpt):
                         print(f"[reuse] {ckpt}")
@@ -133,7 +144,7 @@ def stage_evaluate(args):
 
     for spec in args.datasets:
         kind, name = parse_dataset_spec(spec)
-        tag = dataset_tag(kind, name)
+        tag = run_tag(dataset_tag(kind, name), args)
         met_dir = os.path.join(args.out, "metrics", tag)
         os.makedirs(met_dir, exist_ok=True)
         files = sorted(glob.glob(os.path.join(args.out, "embeds", tag, "*_seed*.npz")))
@@ -167,7 +178,7 @@ def stage_evaluate(args):
     rows = []
     for spec in args.datasets:
         kind, name = parse_dataset_spec(spec)
-        tag = dataset_tag(kind, name)
+        tag = run_tag(dataset_tag(kind, name), args)
         for npz in sorted(glob.glob(os.path.join(args.out, "metrics", tag, "*_seed*.npz"))):
             base = os.path.basename(npz)[:-4]
             method, seed = base.rsplit("_seed", 1)
@@ -219,6 +230,12 @@ def main():
     ap.add_argument("--reuse_checkpoints", type=str, default=None,
                     help="run_all.py output dir whose <tag>/checkpoints/encoder_<method>.pt are "
                          "reused as seed 0 (skips that training run)")
+    ap.add_argument("--lead_index", type=int, default=1,
+                    help="PTB-XL lead: 1 = lead II (default), -1 = all 12 leads")
+    ap.add_argument("--sampling_rate", type=int, default=100, choices=[100, 500])
+    ap.add_argument("--signal_length", type=int, default=1000, help="samples per record (1000 at 100 Hz, 5000 at 500 Hz)")
+    ap.add_argument("--run_tag", type=str, default="",
+                    help="suffix for output dirs of a variant, e.g. _12lead or _500hz (no checkpoint reuse)")
     ap.add_argument("--skip_embed", action="store_true")
     ap.add_argument("--skip_eval", action="store_true")
     ap.add_argument("--force_eval", action="store_true", help="recompute metrics even if present")

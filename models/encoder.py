@@ -57,9 +57,9 @@ class TransformerECGEncoder(nn.Module):
     """Conv tokenizer + Transformer encoder -> pooled d-dim embedding."""
 
     def __init__(self, embed_dim=128, conv_channels=64, n_layers=4, n_heads=4,
-                 ff_dim=256, dropout=0.1):
+                 ff_dim=256, dropout=0.1, in_channels=1):
         super().__init__()
-        self.tokenizer = ConvTokenizer(1, conv_channels, n_layers=3)
+        self.tokenizer = ConvTokenizer(in_channels, conv_channels, n_layers=3)
         self.input_proj = nn.Linear(conv_channels, embed_dim)
         self.pos_enc = PositionalEncoding(embed_dim)
         enc_layer = nn.TransformerEncoderLayer(
@@ -106,11 +106,11 @@ class ResNet18_1D(nn.Module):
     """Lightweight 1-D ResNet-18-style backbone (cheaper alternative to the
     Transformer encoder, per Section 4.4)."""
 
-    def __init__(self, embed_dim=128, base_channels=64):
+    def __init__(self, embed_dim=128, base_channels=64, in_channels=1):
         super().__init__()
         c = base_channels
         self.stem = nn.Sequential(
-            nn.Conv1d(1, c, 15, stride=2, padding=7), nn.BatchNorm1d(c), nn.GELU()
+            nn.Conv1d(in_channels, c, 15, stride=2, padding=7), nn.BatchNorm1d(c), nn.GELU()
         )
         self.layer1 = nn.Sequential(ResNet1DBlock(c, c), ResNet1DBlock(c, c))
         self.layer2 = nn.Sequential(ResNet1DBlock(c, 2 * c, stride=2), ResNet1DBlock(2 * c, 2 * c))
@@ -154,10 +154,10 @@ class FCNEncoder(nn.Module):
     FILTERS = (16, 32, 32, 64)
     KERNELS = (8, 5, 3, 3)
 
-    def __init__(self, embed_dim=64):
+    def __init__(self, embed_dim=64, in_channels=1):
         super().__init__()
         layers = []
-        c_in = 1
+        c_in = in_channels
         for c_out, k in zip(self.FILTERS, self.KERNELS):
             layers += [
                 nn.Conv1d(c_in, c_out, kernel_size=k, padding=k // 2),
@@ -186,10 +186,12 @@ def build_encoder(name: str, cfg) -> nn.Module:
             embed_dim=cfg.embed_dim, conv_channels=cfg.conv_channels,
             n_layers=cfg.n_transformer_layers, n_heads=cfg.n_heads,
             ff_dim=cfg.ff_dim, dropout=cfg.dropout,
+            in_channels=getattr(cfg, "in_channels", 1),
         )
     elif name == "resnet18":
-        return ResNet18_1D(embed_dim=cfg.embed_dim, base_channels=cfg.conv_channels)
+        return ResNet18_1D(embed_dim=cfg.embed_dim, base_channels=cfg.conv_channels,
+                          in_channels=getattr(cfg, "in_channels", 1))
     elif name == "fcn":
-        return FCNEncoder(embed_dim=cfg.embed_dim)
+        return FCNEncoder(embed_dim=cfg.embed_dim, in_channels=getattr(cfg, "in_channels", 1))
     else:
         raise ValueError(f"Unknown encoder '{name}'")

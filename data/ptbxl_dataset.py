@@ -144,11 +144,20 @@ class PTBXLUnivariate(Dataset):
     def _cache_path(self) -> str:
         return os.path.join(
             self.data_root,
-            f"_cache_sr{self.sampling_rate}_lead{self.lead_index}_len{self.signal_length}.npz",
+            f"_cache_sr{self.sampling_rate}_lead{'all' if self.lead_index < 0 else self.lead_index}_len{self.signal_length}.npz",
         )
 
     def _read_signal_from_disk(self, rec_rel: str) -> np.ndarray:
         sig, _ = wfdb.rdsamp(os.path.join(self.data_root, rec_rel))
+        if self.lead_index < 0:                       # all 12 leads -> (12, T), z-normalised per lead
+            x = sig.astype(np.float32).T
+            if x.shape[1] > self.signal_length:
+                x = x[:, : self.signal_length]
+            elif x.shape[1] < self.signal_length:
+                x = np.pad(x, ((0, 0), (0, self.signal_length - x.shape[1])))
+            mu = x.mean(axis=1, keepdims=True)
+            sd = x.std(axis=1, keepdims=True) + 1e-8
+            return (x - mu) / sd
         lead = sig[:, self.lead_index].astype(np.float32)
         if len(lead) > self.signal_length:
             lead = lead[: self.signal_length]
@@ -211,7 +220,9 @@ class PTBXLUnivariate(Dataset):
 
     def __getitem__(self, idx: int):
         lead = self._read_signal(idx)
-        x = torch.from_numpy(lead).unsqueeze(0)  # (1, T)
+        x = torch.from_numpy(lead)
+        if x.dim() == 1:
+            x = x.unsqueeze(0)                   # (1, T); all-lead mode is already (C, T)
         if self.transform is not None:
             x = self.transform(x)
         row = self.meta.iloc[idx]

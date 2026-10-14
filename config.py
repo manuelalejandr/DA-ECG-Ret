@@ -51,7 +51,8 @@ class Config:
     ucr_name: str = "ECG200"                  # which UCR/UEA problem when dataset=="ucr"
     data_root: str = "./ptbxl_data"          # where ptbxl_database.csv etc. live
     sampling_rate: int = 100                  # 100 Hz records (filename_lr)
-    lead_index: int = 1                       # 0=I, 1=II, ... standard 12-lead order
+    lead_index: int = 1                       # 0=I, 1=II, ... standard 12-lead order; -1 = ALL 12 leads
+    in_channels: int = 1                      # encoder input channels (1 for a single lead, 12 for lead_index=-1)
     signal_length: int = 1000                 # 10 s @ 100 Hz (PTB-XL only; UCR/MIT-BIH infer their own)
     superclasses: List[str] = field(
         default_factory=lambda: ["NORM", "MI", "STTC", "CD", "HYP"]
