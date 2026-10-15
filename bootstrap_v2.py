@@ -7,7 +7,7 @@ Writes <out>/tab_bootstrap.tex (encoders vs SimCLR; re-rankers vs NN) and prints
 Test-set sampling: queries are resampled by PATIENT (2000 resamples, same resamples for both arms
 of a pair), on per-query metrics averaged over the training seeds. Training randomness: s.d. over
 seeds of the paired difference of the full-set means (reported separately, never pooled).
-alpha-nDCG uses the stratum |S_q|>=2 (subclass level); P@10 uses all queries.
+All metrics (alpha-nDCG and P@10) use the same population: queries with |S_q|>=2 (subclass level).
 """
 import argparse
 import glob
@@ -15,8 +15,8 @@ import os
 
 import numpy as np
 
-SSL = ["simclr", "ts2vec", "tfc", "softclt", "da_ecg_ret"]
-NAMES = {"simclr": "SimCLR", "ts2vec": "TS2Vec", "tfc": "TF-C", "softclt": "SoftCLT", "da_ecg_ret": "DA-ECG-Ret",
+SSL = ["simclr", "ts2vec", "tfc", "softclt", "da_ecg_ret"]            # simclr_tuned is a row of its own, not part of the mean
+NAMES = {"simclr": "SimCLR", "simclr_tuned": "SimCLR (tuned on fold 9)", "ts2vec": "TS2Vec", "tfc": "TF-C", "softclt": "SoftCLT", "da_ecg_ret": "DA-ECG-Ret",
          "supervised_fine": "Supervised (SCP)", "supervised_super": "Supervised (superclass)"}
 B = 2000
 
@@ -86,7 +86,7 @@ def main():
     for m in [x for x in NAMES if x in d and x != "simclr"]:
         seeds = sorted(set(d[m]) & set(d["simclr"]))
         ra = pair(per_query(d, m, "nn", "aNDCG_sub", seeds), per_query(d, "simclr", "nn", "aNDCG_sub", seeds), sq2)
-        rp = pair(per_query(d, m, "nn", "P", seeds), per_query(d, "simclr", "nn", "P", seeds), allq)
+        rp = pair(per_query(d, m, "nn", "P", seeds), per_query(d, "simclr", "nn", "P", seeds), sq2)
         rows_a.append(f"{NAMES[m]} & {fmt(*ra)} & {fmt(*rp, d=3)} \\\\")
         out.append(f"{NAMES[m]} vs SimCLR: dANDCG {ra[0]:+.4f} [{ra[1]:+.4f},{ra[2]:+.4f}] sd {ra[3]:.4f} | dP {rp[0]:+.3f} [{rp[1]:+.3f},{rp[2]:+.3f}]")
 
@@ -95,16 +95,19 @@ def main():
     seeds = sorted(set.intersection(*[set(d[m]) for m in ssl]))
     def stack(ranker, metric):
         return np.mean([per_query(d, m, ranker, metric, seeds) for m in ssl], 0)
-    labels = {"dpp": r"DPP $\theta=1$", "mmr@0.5": r"MMR $\lambda=0.5$", "mmr@0.7": r"MMR $\lambda=0.7$",
-              "mmr@0.3": r"MMR $\lambda=0.3$", "xquad@0.5": r"xQuAD (pseudo-intents) $\lambda=0.5$"}
+    labels = {"mmr@0.3": r"MMR $\lambda=0.3$", "mmr@0.5": r"MMR $\lambda=0.5$", "mmr@0.7": r"MMR $\lambda=0.7$",
+              "dpp": r"DPP $\theta=1$", "xquad@0.5": r"xQuAD (pseudo-intents) $\lambda=0.5$",
+              "xquad_cl_sub@0.5": r"xQuAD (corpus labels, predicted family) $\lambda=0.5$"}
     nn_a, nn_p = stack("nn", "aNDCG_sub"), stack("nn", "P")
     for r, lab in labels.items():
+        if f"{r}__10__aNDCG_sub" not in first.files:
+            continue
         ra = pair(stack(r, "aNDCG_sub"), nn_a, sq2)
-        rp = pair(stack(r, "P"), nn_p, allq)
+        rp = pair(stack(r, "P"), nn_p, sq2)
         rows_b.append(f"{lab} & {fmt(*ra)} & {fmt(*rp, d=3)} \\\\")
         out.append(f"{r} vs NN (mean of SSL): dANDCG {ra[0]:+.4f} [{ra[1]:+.4f},{ra[2]:+.4f}] sd {ra[3]:.4f} | dP {rp[0]:+.3f} [{rp[1]:+.3f},{rp[2]:+.3f}]")
 
-    hdr = r"& \multicolumn{3}{c}{$\Delta\alpha$-nDCG@10 ($|S_q|\ge2$)} & \multicolumn{3}{c}{$\Delta$P@10 (all queries)} \\" + "\n" + \
+    hdr = r"& \multicolumn{3}{c}{$\Delta\alpha$-nDCG@10 ($|S_q|\ge2$)} & \multicolumn{3}{c}{$\Delta$P@10 ($|S_q|\ge2$)} \\" + "\n" + \
           r"& mean & 95\% CI & seed s.d. & mean & 95\% CI & seed s.d. \\"
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "tab_bootstrap.tex"), "w") as f:

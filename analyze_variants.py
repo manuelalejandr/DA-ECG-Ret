@@ -17,7 +17,7 @@ import pandas as pd
 
 from analyze_v2 import NAMES, SUP, pm, table, val
 
-NAMES = dict(NAMES, hubert_ecg="HuBERT-ECG (frozen)", ecg_fm="ECG-FM (frozen)", st_mem="ST-MEM (frozen)")
+NAMES = dict(NAMES, hubert_ecg="HuBERT-ECG (frozen)")
 
 
 def main():
@@ -44,11 +44,11 @@ def main():
                     return "--"
                 v = au[(au.method == m) & (au.metric == met)].sort_values("seed").value.values
                 return pm(v)
-            rows.append(f"{NAMES[m]} & {pm(val(df, m, 'nn', 'P'))} & {pm(val(df, m, 'nn', 'aNDCG_sub', a.primary))} & "
+            rows.append(f"{NAMES[m]} & {pm(val(df, m, 'nn', 'P', a.primary))} & {pm(val(df, m, 'nn', 'aNDCG_sub', a.primary))} & "
                         f"{pm(val(df, m, 'nn', 'RelDiv_sub', a.primary))} & {aur('AUROC_super')} & {aur('AUROC_code')} \\\\")
         if first:
             m0 = meths[0]
-            rnd = [val(df, m0, "rand", "P"), val(df, m0, "rand", "aNDCG_sub", a.primary), val(df, m0, "rand", "RelDiv_sub", a.primary)]
+            rnd = [val(df, m0, "rand", "P", a.primary), val(df, m0, "rand", "aNDCG_sub", a.primary), val(df, m0, "rand", "RelDiv_sub", a.primary)]
             rnd_row = "Random cohort & " + " & ".join(f"${np.mean(r):.3f}$" for r in rnd) + r" & -- & -- \\"
         first = False
     rows = [r for r in rows if r] + [r"\midrule", rnd_row]

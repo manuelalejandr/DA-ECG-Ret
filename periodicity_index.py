@@ -66,9 +66,9 @@ def main():
         d = raw[raw.dataset == ds]
         def val(m, met):
             sel = (d.method == m) & (d.metric == met)
- if met == "P":
- sel &= (d.ranker == "nn") & (d.K == 10)
- v = d[sel].value
+            if met == "P":
+                sel &= (d.ranker == "nn") & (d.K == 10)
+            v = d[sel].value
             return float(v.iloc[0]) if len(v) else np.nan
         rows.append(dict(dataset=ds, series_len=len(xs[0]), periodicity=pi, one_minus_flatness=sf,
                          dP_tfc_simclr=val("tfc", "P") - val("simclr", "P"),

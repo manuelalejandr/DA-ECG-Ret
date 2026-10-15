@@ -38,10 +38,13 @@ XQUAD_LAMBDAS = (0.5,)
 N_PSEUDO_INTENTS = 5
 
 
-def default_rerankers(fine_names: Sequence[str]) -> List[str]:
+def default_rerankers(fine_names: Sequence[str], with_corpus_labels: bool = False) -> List[str]:
+    """with_corpus_labels: add the scenario-B rankers (corpus labels known, query family predicted)."""
     r = ["nn"] + [f"mmr@{l}" for l in MMR_LAMBDAS] + ["dpp"] + [f"dpp@{t}" for t in DPP_THETAS]
     r += [f"xquad@{l}" for l in XQUAD_LAMBDAS]
     for nm in fine_names:
+        if with_corpus_labels:
+            r += [f"xquad_cl_{nm}@{l}" for l in XQUAD_LAMBDAS] + [f"xquad_clw_{nm}@{l}" for l in XQUAD_LAMBDAS]
         r += [f"xquad_or_{nm}@{l}" for l in XQUAD_LAMBDAS] + [f"oracle_{nm}"]
     return r + ["rand"]
 
@@ -173,13 +176,20 @@ def evaluate_v2(
     rerankers: Optional[List[str]] = None, ks: Tuple[int, ...] = (5, 10, 20),
     n_shortlist: int = 200, alphas: Sequence[float] = ALPHAS,
     max_queries: Optional[int] = None, seed: int = 0, verbose: bool = True,
+    q_prob: Optional[np.ndarray] = None,                   # (nq, C) predicted superclass probabilities (scenario B)
 ) -> Dict[str, np.ndarray]:
     assert exclusion in ("patient", "self", "none")
     if same_set:
         c_emb, c_pat, c_coarse = q_emb, q_pat, q_coarse
         c_fine = {nm: f for nm, (f, _) in q_fine.items()}
     names = list(q_fine)
-    rerankers = rerankers or default_rerankers(names)
+    rerankers = rerankers or default_rerankers(names, with_corpus_labels=q_prob is not None)
+    if q_prob is not None:
+        from retrieval.family_probe import decide
+        q_pred = decide(np.asarray(q_prob, dtype=np.float64))
+    else:
+        q_pred = None
+        assert not any(r.startswith(("xquad_cl_", "xquad_clw_")) for r in rerankers), "needs q_prob"
     rng = np.random.RandomState(seed)
     nq = len(q_emb)
     qidx = np.arange(nq)
@@ -247,6 +257,13 @@ def evaluate_v2(
                 float(M_cand[nm].any(0).sum()) / tot if tot else np.nan)
         relc = (cc[cand] & qc[qi]).any(axis=1)
         put("shortlist", len(cand), "SLP", float(relc.mean()))
+        if q_pred is not None:
+            tp = float((q_pred[qi] & qc[qi]).sum())
+            put("struct", 0, "fam_exact", float((q_pred[qi] == qc[qi]).all()))
+            put("struct", 0, "fam_hit", float((q_pred[qi] & qc[qi]).any()))
+            put("struct", 0, "fam_tp", tp)
+            put("struct", 0, "fam_npred", float(q_pred[qi].sum()))
+            put("struct", 0, "fam_ntrue", float(qc[qi].sum()))
 
         # rankings
         lists = {}
@@ -278,6 +295,25 @@ def evaluate_v2(
                     lists[r] = cand[:k_max]
                 else:
                     lists[r] = cand[xquad_select(rel, M, np.ones(M.shape[1]) / M.shape[1], k_max, float(lam))]
+            elif r.startswith(("xquad_cl_", "xquad_clw_")):
+                # scenario B: corpus labels known, query family predicted by a probe
+                weighted = r.startswith("xquad_clw_")
+                nm, lam = r.split("_", 2)[2].split("@")
+                Fq, par, Fc = fl[nm]
+                sp = (par.astype(np.float32) @ q_pred[qi].astype(np.float32)) > 0       # predicted S_q
+                keepp = Fc[cmask][:, sp].sum(0) > 0
+                M = Fc[cand][:, sp][:, keepp].astype(np.float64)
+                rel = np.clip(sim_q, 0, None)
+                rel = rel / (rel.max() + 1e-8)
+                if M.shape[1] == 0:
+                    lists[r] = cand[:k_max]
+                else:
+                    if weighted:
+                        w = (par[sp][keepp] * q_prob[qi][None, :]).max(1).astype(np.float64)
+                        P_i = w / w.sum() if w.sum() > 0 else np.ones(M.shape[1]) / M.shape[1]
+                    else:
+                        P_i = np.ones(M.shape[1]) / M.shape[1]
+                    lists[r] = cand[xquad_select(rel, M, P_i, k_max, float(lam))]
             elif r.startswith("oracle_"):
                 nm = r[len("oracle_"):]
                 lists[r] = cand[oracle_select(M_cand[nm], k_max, MAIN_ALPHA)]

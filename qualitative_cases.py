@@ -9,6 +9,7 @@ so the figure is not cherry-picked.
 """
 import argparse
 import os
+import textwrap
 
 import matplotlib
 matplotlib.use("Agg")
@@ -17,6 +18,29 @@ import numpy as np
 import wfdb
 
 from data.ptbxl_dataset import load_ptbxl_metadata, patient_wise_split
+
+
+def make_title(c, sups, subs, rel):
+    """Short multi-line title: rank tag, superclasses, subclasses (wrapped)."""
+    tag = "query" if c == 0 else f"#{c}" + ("" if rel else " not relevant")
+    return tag + "\n" + "/".join(sups) + "\n" + textwrap.fill(", ".join(subs), width=15, break_long_words=False, break_on_hyphens=False)
+
+
+def plot_panels(panels, out, fontsize=9.5):
+    """panels: list of rows of (signal, title, is_query, relevant). Large fonts so that the titles stay
+    legible when the figure is scaled to the text width (about 6 in)."""
+    nr, nc = len(panels), len(panels[0])
+    fig, axes = plt.subplots(nr, nc, figsize=(1.75 * nc, 2.05 * nr), squeeze=False)
+    for r, row in enumerate(panels):
+        for c, (x, title, isq, rel) in enumerate(row):
+            ax = axes[r, c]
+            ax.plot(x, lw=0.6, color="C3" if isq else "k")
+            ax.set_xticks([]); ax.set_yticks([])
+            ax.set_title(title, fontsize=fontsize, linespacing=1.15, color="k" if (isq or rel) else "C3")
+    plt.tight_layout(w_pad=0.4, h_pad=0.8)
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    plt.savefig(out, dpi=300)
+    plt.close(fig)
 
 
 def main():
@@ -45,30 +69,24 @@ def main():
 
     rng = np.random.RandomState(a.seed)
     sim = emb @ emb.T
-    fig, axes = plt.subplots(len(a.classes), a.k + 1, figsize=(3.0 * (a.k + 1), 2.1 * len(a.classes)), squeeze=False)
+    panels = []   # rows of (signal, title, is_query, relevant)
     for r, cname in enumerate(a.classes):
         ci = sup.index(cname)
-        # subtopics of the query's family
-        S = np.where(sub2sup[:, ci])[0]
+        S = np.where(sub2sup[:, ci])[0]          # subtopics of the query's family
         cand = np.where(lab_sup[:, ci] & (lab_sub[:, S].sum(1) >= 1))[0]
         q = int(rng.choice(cand))
         s = sim[q].copy()
         s[pat == pat[q]] = -np.inf
         top = np.argsort(-s)[: a.k]
+        row = []
         for c, idx in enumerate([q] + list(top)):
             sig, _ = wfdb.rdsamp(os.path.join(a.data_root, test.iloc[idx]["filename_lr"]))
-            x = sig[:, a.lead]
-            ax = axes[r, c]
-            ax.plot(x, lw=0.7, color="C3" if c == 0 else "k")
-            ax.set_xticks([]); ax.set_yticks([])
             subs = [sub[j] for j in np.where(lab_sub[idx])[0]]
             sups = [sup[j] for j in np.where(lab_sup[idx])[0]]
-            rel = (lab_sup[idx] & lab_sup[q]).any()
-            tag = "query" if c == 0 else f"#{c}" + ("" if rel else " (not relevant)")
-            ax.set_title(f"{tag}\n{'/'.join(sups)}: {','.join(subs)}", fontsize=7)
-    plt.tight_layout()
-    os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    plt.savefig(a.out, dpi=300)
+            rel = bool((lab_sup[idx] & lab_sup[q]).any())
+            row.append((sig[:, a.lead], make_title(c, sups, subs, rel), c == 0, rel))
+        panels.append(row)
+    plot_panels(panels, a.out)
     print("saved", a.out)
 
 

@@ -48,10 +48,14 @@ def evaluate_file(path, args):
         fine_q["code"] = (z["te_lab_code"], z["code2super"])
         fine_c["code"] = z["tr_lab_code"] if args.corpus == "train" else z["te_lab_code"]
     same = args.corpus == "test"
-    kw = dict(q_emb=z["te_emb"], q_pat=z["te_patients"], q_coarse=z["te_lab"], q_fine=fine_q,
+    q_prob = None
+    if not same and not args.no_probe:
+        from retrieval.family_probe import fit_predict_proba
+        q_prob = fit_predict_proba(z["tr_emb"].astype(np.float64), z["tr_lab"], z["te_emb"].astype(np.float64))
+    kw = dict(q_prob=q_prob, q_emb=z["te_emb"], q_pat=z["te_patients"], q_coarse=z["te_lab"], q_fine=fine_q,
               same_set=same, exclusion=args.exclusion, ks=tuple(args.ks),
               n_shortlist=args.n_shortlist, max_queries=args.max_queries,
-              rerankers=default_rerankers(list(fine_q)) if args.rerankers is None else args.rerankers)
+              rerankers=default_rerankers(list(fine_q), with_corpus_labels=q_prob is not None) if args.rerankers is None else args.rerankers)
     if not same:
         kw.update(c_emb=z["tr_emb"], c_pat=None, c_coarse=z["tr_lab"], c_fine=fine_c)
     return evaluate_v2(**kw), z
@@ -103,6 +107,7 @@ def main():
     ap.add_argument("--rerankers", nargs="+", default=None)
     ap.add_argument("--max_queries", type=int, default=None)
     ap.add_argument("--tag", default="ptbxl", help="embeds sub-dir (e.g. ptbxl_12lead)")
+    ap.add_argument("--no_probe", action="store_true", help="skip the scenario-B rankers (corpus labels, predicted family)")
     ap.add_argument("--force", action="store_true")
     args = ap.parse_args()
 
